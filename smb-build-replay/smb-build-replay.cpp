@@ -10,6 +10,8 @@
 #include "json.hpp"
 using json = nlohmann::json;
 
+#include <boost/program_options.hpp>
+
 std::vector<uint8_t> loadFile(const std::string &filename)
 {
 	FILE *file = fopen(filename.c_str(), "rb");
@@ -535,8 +537,6 @@ void deserializeJSON<ReplayFile>(const nlohmann::json &buffer, const std::string
 
 int main(int argc, char **argv)
 {
-	using namespace nlohmann;
-
 	std::vector<std::string> args;
 	for (int i = 0; i < argc; ++i)
 	{
