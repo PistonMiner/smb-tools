@@ -53,6 +53,16 @@ std::vector<uint8_t> stringToBuffer(const std::string &buffer)
 	return binaryBuffer;
 }
 
+std::string bufferToString(const std::vector<uint8_t> &buffer)
+{
+	std::string outputString;
+	for (const auto &c : buffer)
+	{
+		outputString += static_cast<char>(c);
+	}
+	return outputString;
+}
+
 std::vector<uint8_t> compressBufferRLE(const std::vector<uint8_t> &buffer)
 {
 	// First, find sequences worth compressing
@@ -574,34 +584,109 @@ void deserializeJSON<ReplayFile>(const nlohmann::json &buffer, const std::string
 
 int main(int argc, char **argv)
 {
-	std::vector<std::string> args;
-	for (int i = 0; i < argc; ++i)
-	{
-		args.emplace_back(argv[i]);
-	}
+	namespace po = boost::program_options;
+	po::options_description optionDescription("Valid options");
+	optionDescription.add_options()
+		("help"									, "print usage")
+		("in-format,i",	po::value<std::string>(), "input file format (binary, json)")
+		("out-format,o",	po::value<std::string>(), "output file format (binary, json)")
+		("in-file",		po::value<std::string>(), "input filename")
+		("out-file",	po::value<std::string>(), "output filename");
+	po::positional_options_description positionalOptionDescription;
+	//positionalOptionDescription.add("in-format", 1);
+	//positionalOptionDescription.add("out-format", 1);
+	positionalOptionDescription.add("in-file", 1);
+	positionalOptionDescription.add("out-file", 1);
 
-	if (args.size() < 1)
+	po::variables_map varMap;
+	po::parsed_options parsedOptions = po::command_line_parser(argc, argv)
+		.options(optionDescription)
+		.positional(positionalOptionDescription)
+		.allow_unregistered().run();
+	std::vector<std::string> unrecognizedOptions = po::collect_unrecognized(parsedOptions.options, po::exclude_positional);
+	po::store(parsedOptions, varMap);
+	po::notify(varMap);
+
+	enum class FileFormat
 	{
-		//printf("usage: smb-build-replay <JSON configuration file> <output GCI file>");
+		Unknown,
+		Binary,
+		JSON,
+	};
+
+	const std::map<std::string, FileFormat> fileFormatMap = {
+		{ "binary", FileFormat::Binary },
+		{ "json", FileFormat::JSON },
+	};
+
+	auto getFileFormatByName = [=](const std::string &name)
+	{
+		auto it = fileFormatMap.find(name);
+		if (it == fileFormatMap.end())
+		{
+			return FileFormat::Unknown;
+		}
+		else
+		{
+			return it->second;
+		}
+	};
+
+	if (varMap.count("help") || unrecognizedOptions.size()
+		|| varMap.count("in-format") != 1
+		|| varMap.count("out-format") != 1
+		|| varMap.count("in-file") != 1
+		|| varMap.count("out-file") != 1)
+	{
+		optionDescription.print(std::cout);
+		return 1;
+	}
+	
+	ReplayFile replay;
+	auto inputData = loadFile(varMap.at("in-file").as<std::string>());
+	if (!inputData.size())
+	{
+		std::cout << "Failed to read input file!" << std::endl;
 		return -1;
 	}
 
-	//auto inputData = loadFile(args[1]);
-	//json inputJSON = json::parse(inputData);
+	FileFormat inputFormat = getFileFormatByName(varMap.at("in-format").as<std::string>());
+	if (inputFormat == FileFormat::Binary)
+	{
+		deserializeBinary(inputData, replay);
+	}
+	else if (inputFormat == FileFormat::JSON)
+	{
+		nlohmann::json inputJSON = json::parse(bufferToString(inputData));
+		deserializeJSON(inputJSON, "root", replay);
+	}
+	else
+	{
+		std::cout << "Unknown input format!" << std::endl;
+		return -1;
+	}
 
-	auto inputData = loadFile(args[1]);
-	ReplayFile inputFile;
-	deserializeBinary(inputData, inputFile);
-	nlohmann::json json;
-	serializeJSON(json, "root", inputFile);
-
-	saveFile(args[1] + ".json", stringToBuffer(json.dump(2)));
-
-	ReplayFile outputFile;
-	deserializeJSON(json, "root", outputFile);
+	FileFormat outputFormat = getFileFormatByName(varMap.at("out-format").as<std::string>());
 	std::vector<uint8_t> outputData;
-	serializeBinary(outputData, outputFile);
-	saveFile(args[1] + ".re", outputData);
+	if (outputFormat == FileFormat::Binary)
+	{
+		serializeBinary(outputData, replay);
+	}
+	else if (outputFormat == FileFormat::JSON)
+	{
+		nlohmann::json outputJSON;
+		serializeJSON(outputJSON, "root", replay);
+		outputData = stringToBuffer(outputJSON.dump());
+	}
+	else
+	{
+		std::cout << "Unknown output format!" << std::endl;
+		return -1;
+	}
+	if (!saveFile(varMap.at("out-file").as<std::string>(), outputData))
+	{
+		std::cout << "Failed to write output file!" << std::endl;
+	}
 
 	return 0;
 }
