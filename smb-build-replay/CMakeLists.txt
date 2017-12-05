@@ -16,7 +16,7 @@ if(UNIX)
 endif(UNIX)
 
 #External dependencies
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED COMPONENTS program_options)
 
 include_directories(.)
 
@@ -30,11 +30,12 @@ set(HEADER_FILES
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 
+target_link_libraries(${PROJECT_NAME} Boost::program_options)
+
 if(WIN32)
     #Windows has no concept of rpath, so just group all the exes/dlls in one big mess of a directory
     install(TARGETS ${PROJECT_NAME} DESTINATION .)
 else(WIN32)
     install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 endif(WIN32)
-
 
