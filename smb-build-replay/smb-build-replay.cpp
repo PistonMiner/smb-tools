@@ -3,9 +3,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <iostream>
-#include <fstream>
 #include <vector>
-#include <array>
 
 #include "json.hpp"
 using json = nlohmann::json;
@@ -55,45 +53,84 @@ std::vector<uint8_t> stringToBuffer(const std::string &buffer)
 	return binaryBuffer;
 }
 
-/*enum class DataBlockType
+std::vector<uint8_t> compressBufferRLE(const std::vector<uint8_t> &buffer)
 {
-	DeltaX0,
-	DeltaX1,
-	DeltaY0,
-	DeltaY1,
-	DeltaZ0,
-	DeltaZ1,
-	PlayerTiltX0,
-	PlayerTiltX1,
-	PlayerTiltY0,
-	PlayerTiltY1,
-	PlayerTiltZ0,
-	PlayerTiltZ1,
-	Data5,
-	Data6,
-	Data7,
-	Data8,
-	Flags0,
-	Flags1,
-	Flags2,
-	Flags3,
-	StageTiltX0,
-	StageTiltX1,
-	StageTiltZ0,
-	StageTiltZ1,
-	DataBlockType_Count,
-};
+	// First, find sequences worth compressing
+	struct RepeatingRegion
+	{
+		RepeatingRegion(size_t offset, uint8_t value)
+			: offset(offset), value(value)
+		{}
 
-enum DataType
+		size_t offset;
+		uint8_t value;
+		size_t count;
+	};
+	std::vector<RepeatingRegion> repeatList;
+	for (size_t i = 0; i < buffer.size(); ++i)
+	{
+		if (repeatList.empty() || repeatList.back().count >= 0x7F || buffer[i] != repeatList.back().value)
+		{
+			repeatList.emplace_back(i, buffer[i]);
+		}
+		++repeatList.back().count;
+	}
+	// Remove regions not worth compressing
+	std::remove_if(repeatList.begin(), repeatList.end(), [](const auto &val)
+	{
+		return val.count <= 2;
+	});
+	// Write out compressed binary
+	std::vector<uint8_t> compressedBuffer;
+	for (size_t i = 0; i < buffer.size(); )
+	{
+		if (!repeatList.empty() && repeatList.back().offset == i)
+		{
+			const auto &region = repeatList.back();
+			compressedBuffer.emplace_back(static_cast<uint8_t>(region.count & 0x80));
+			compressedBuffer.emplace_back(region.value);
+			i += region.count;
+			repeatList.pop_back();
+		}
+		else
+		{
+			// Write to end of buffer or to next compressed region
+			size_t length = std::min(repeatList.empty() ? buffer.size() - i : repeatList.back().offset - i, static_cast<size_t>(0x7F));
+			compressedBuffer.emplace_back(static_cast<uint8_t>(length));
+			size_t currentSize = compressedBuffer.size();
+			compressedBuffer.resize(compressedBuffer.size() + length);
+			auto sourceIt = buffer.begin() + i;
+			auto targetIt = compressedBuffer.begin() + currentSize;
+			std::copy(sourceIt, sourceIt + length, targetIt);
+		}
+	}
+	return compressedBuffer;
+}
+
+std::vector<uint8_t> decompressBufferRLE(const std::vector<uint8_t> &buffer)
 {
-	PositionDelta,
-	PlayerTilt,
-	Data567,
-	Data8,
-	Flags,
-	StageTilt,
-	DataType_Count,
-};*/
+	std::vector<uint8_t> decompressedBuffer;
+	for (size_t i = 0; i < buffer.size(); )
+	{
+		if (buffer[i] & 0x80)
+		{
+			decompressedBuffer.insert(decompressedBuffer.end(), buffer[i] & ~0x80, buffer[i + 1]);
+			i += 2;
+		}
+		else
+		{
+			// Make room
+			size_t currentSize = decompressedBuffer.size();
+			decompressedBuffer.resize(currentSize + buffer[i]);
+			// Copy data
+			auto sourceIt = buffer.begin() + i + 1;
+			auto targetIt = decompressedBuffer.begin() + currentSize;
+			std::copy(sourceIt, sourceIt + buffer[i], targetIt);
+			i += buffer[i] + 1;
+		}
+	}
+	return decompressedBuffer;
+}
 
 template<typename T>
 void serializeBinary(std::vector<uint8_t> &buffer, const T &value)
