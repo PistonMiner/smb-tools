@@ -1,9 +1,9 @@
-// Copyright (c) 2017 Linus S. (aka PistonMiner)
-
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <iostream>
 #include <vector>
+#include <deque>
+#include <chrono>
 
 #include "json.hpp"
 using json = nlohmann::json;
@@ -69,14 +69,14 @@ std::vector<uint8_t> compressBufferRLE(const std::vector<uint8_t> &buffer)
 	struct RepeatingRegion
 	{
 		RepeatingRegion(size_t offset, uint8_t value)
-			: offset(offset), value(value)
+			: offset(offset), value(value), count(0)
 		{}
 
 		size_t offset;
 		uint8_t value;
 		size_t count;
 	};
-	std::vector<RepeatingRegion> repeatList;
+	std::deque<RepeatingRegion> repeatList;
 	for (size_t i = 0; i < buffer.size(); ++i)
 	{
 		if (repeatList.empty() || repeatList.back().count >= 0x7F || buffer[i] != repeatList.back().value)
@@ -86,41 +86,44 @@ std::vector<uint8_t> compressBufferRLE(const std::vector<uint8_t> &buffer)
 		++repeatList.back().count;
 	}
 	// Remove regions not worth compressing
-	std::remove_if(repeatList.begin(), repeatList.end(), [](const auto &val)
+	repeatList.erase(std::remove_if(repeatList.begin(), repeatList.end(), [](const auto &val)
 	{
 		return val.count <= 2;
-	});
+	}), repeatList.end());
 	// Write out compressed binary
 	std::vector<uint8_t> compressedBuffer;
 	for (size_t i = 0; i < buffer.size(); )
 	{
-		if (!repeatList.empty() && repeatList.back().offset == i)
+		if (!repeatList.empty() && repeatList.front().offset == i)
 		{
-			const auto &region = repeatList.back();
-			compressedBuffer.emplace_back(static_cast<uint8_t>(region.count & 0x80));
+			const auto &region = repeatList.front();
+			compressedBuffer.emplace_back(static_cast<uint8_t>(region.count | 0x80));
 			compressedBuffer.emplace_back(region.value);
 			i += region.count;
-			repeatList.pop_back();
+			repeatList.pop_front();
 		}
 		else
 		{
 			// Write to end of buffer or to next compressed region
-			size_t length = std::min(repeatList.empty() ? buffer.size() - i : repeatList.back().offset - i, static_cast<size_t>(0x7F));
-			compressedBuffer.emplace_back(static_cast<uint8_t>(length));
-			size_t currentSize = compressedBuffer.size();
-			compressedBuffer.resize(compressedBuffer.size() + length);
-			auto sourceIt = buffer.begin() + i;
-			auto targetIt = compressedBuffer.begin() + currentSize;
-			std::copy(sourceIt, sourceIt + length, targetIt);
+			size_t length = repeatList.empty() ? buffer.size() - i : repeatList.front().offset - i;
+			// Can only write up to 0x7F bytes contiguously
+			for (size_t j = 0; j < length; j += 0x7F)
+			{
+				size_t tagLength = std::min(static_cast<size_t>(length - j), static_cast<size_t>(0x7Fu));
+				compressedBuffer.emplace_back(static_cast<uint8_t>(tagLength));
+				auto sourceIt = buffer.begin() + i + j;
+				compressedBuffer.insert(compressedBuffer.end(), sourceIt, sourceIt + tagLength);
+			}
+			i += length;
 		}
 	}
 	return compressedBuffer;
 }
 
-std::vector<uint8_t> decompressBufferRLE(const std::vector<uint8_t> &buffer)
+std::vector<uint8_t> decompressBufferRLE(const std::vector<uint8_t> &buffer, size_t decompressedSize)
 {
 	std::vector<uint8_t> decompressedBuffer;
-	for (size_t i = 0; i < buffer.size(); )
+	for (size_t i = 0; i < buffer.size() && decompressedBuffer.size() < decompressedSize; )
 	{
 		if (buffer[i] & 0x80)
 		{
@@ -130,16 +133,37 @@ std::vector<uint8_t> decompressBufferRLE(const std::vector<uint8_t> &buffer)
 		else
 		{
 			// Make room
-			size_t currentSize = decompressedBuffer.size();
-			decompressedBuffer.resize(currentSize + buffer[i]);
-			// Copy data
 			auto sourceIt = buffer.begin() + i + 1;
-			auto targetIt = decompressedBuffer.begin() + currentSize;
-			std::copy(sourceIt, sourceIt + buffer[i], targetIt);
+			decompressedBuffer.insert(decompressedBuffer.end(), sourceIt, sourceIt + buffer[i]);
 			i += buffer[i] + 1;
 		}
 	}
 	return decompressedBuffer;
+}
+
+uint16_t getCRCForBuffer(const std::vector<uint8_t> &buffer)
+{
+	const uint16_t polynomial = 0x1021;
+	uint16_t checksum = 0xFFFF;
+	for (const auto &val : buffer)
+	{
+		checksum ^= (val << 8);
+
+		for (size_t i = 0; i < 8; ++i)
+		{
+			if (checksum & 0x8000)
+			{
+				checksum <<= 1;
+				checksum ^= polynomial;
+			}
+			else
+			{
+				checksum <<= 1;
+			}
+		}
+	}
+	checksum = ~checksum;
+	return checksum;
 }
 
 template<typename T>
@@ -147,7 +171,7 @@ void serializeBinary(std::vector<uint8_t> &buffer, const T &value)
 {
 	for (size_t i = sizeof(T); i > 0; --i)
 	{
-		buffer.emplace_back((value >> (i - 1) * 8) & 0xFF);
+		buffer.emplace_back(static_cast<uint8_t>((value >> (i - 1) * 8) & 0xFF));
 	}
 }
 
@@ -582,6 +606,54 @@ void deserializeJSON<ReplayFile>(const nlohmann::json &buffer, const std::string
 	deserializeJSON(buffer[name], "flags", value.flags);
 }
 
+struct GCIFile
+{
+	uint32_t gameCode = 0x474D4245; // "GMBE" #todo-smb-build-replay: Support multiple regions
+	uint16_t makerCode = 0x3850; // "8P"
+	//uint8_t unused_06 = 0xFF;
+	uint8_t bannerFlags = 0x2; // RGB5A3 format
+	std::string filename = "";
+	uint32_t modifiedTime = 0x0;
+	uint32_t imageOffset = 0x10; // Constant for SMB replays
+	uint16_t iconFormat = 0x2; // RGB5A3 format
+	uint16_t animationSpeed = 0x3; // 12 frames
+	uint8_t permissions = 0x4; // no move
+	uint8_t copyCounter = 0x0;
+	uint16_t firstBlockNumber = 0x0;
+	uint16_t blockCount = 0x0;
+	//uint16_t unused_3A = 0xFFFF;
+	uint32_t commentsAddress = 0x2010;
+
+	const static size_t cReplayDataOffset = 0x2090;
+	const static size_t cBlockSize = 0x2000;
+	const static size_t cCommentFieldSize = 0x20;
+	const static std::string cGameName;
+};
+
+const std::string GCIFile::cGameName = "Super Monkey Ball";
+
+template<>
+void serializeBinary<GCIFile>(std::vector<uint8_t> &buffer, const GCIFile &value)
+{
+	serializeBinary(buffer, value.gameCode);
+	serializeBinary(buffer, value.makerCode);
+	serializeBinary(buffer, static_cast<uint8_t>(0xFF));
+	serializeBinary(buffer, value.bannerFlags);
+	auto filenameBuffer = stringToBuffer(value.filename);
+	filenameBuffer.resize(0x20, 0);
+	serializeBinary(buffer, filenameBuffer);
+	serializeBinary(buffer, value.modifiedTime);
+	serializeBinary(buffer, value.imageOffset);
+	serializeBinary(buffer, value.iconFormat);
+	serializeBinary(buffer, value.animationSpeed);
+	serializeBinary(buffer, value.permissions);
+	serializeBinary(buffer, value.copyCounter);
+	serializeBinary(buffer, value.firstBlockNumber);
+	serializeBinary(buffer, value.blockCount);
+	serializeBinary(buffer, static_cast<uint16_t>(0xFFFF));
+	serializeBinary(buffer, value.commentsAddress);
+}
+
 int main(int argc, char **argv)
 {
 	namespace po = boost::program_options;
@@ -612,11 +684,13 @@ int main(int argc, char **argv)
 		Unknown,
 		Binary,
 		JSON,
+		GCI,
 	};
 
 	const std::map<std::string, FileFormat> fileFormatMap = {
 		{ "binary", FileFormat::Binary },
 		{ "json", FileFormat::JSON },
+		{ "gci", FileFormat::GCI },
 	};
 
 	auto getFileFormatByName = [=](const std::string &name)
@@ -660,6 +734,14 @@ int main(int argc, char **argv)
 		nlohmann::json inputJSON = json::parse(bufferToString(inputData));
 		deserializeJSON(inputJSON, "root", replay);
 	}
+	else if (inputFormat == FileFormat::GCI)
+	{
+		inputData.erase(inputData.begin(), inputData.begin() + GCIFile::cReplayDataOffset);
+		uint64_t decompressedSize;
+		deserializeBinary(inputData, decompressedSize);
+		auto decompressedData = decompressBufferRLE(inputData, static_cast<size_t>(decompressedSize));
+		deserializeBinary(decompressedData, replay);
+	}
 	else
 	{
 		std::cout << "Unknown input format!" << std::endl;
@@ -677,6 +759,73 @@ int main(int argc, char **argv)
 		nlohmann::json outputJSON;
 		serializeJSON(outputJSON, "root", replay);
 		outputData = stringToBuffer(outputJSON.dump());
+	}
+	else if (outputFormat == FileFormat::GCI)
+	{
+		std::vector<uint8_t> uncompressedBuffer;
+		serializeBinary(uncompressedBuffer, replay);
+		auto compressedBuffer = compressBufferRLE(uncompressedBuffer);
+		
+		size_t finalSize = compressedBuffer.size() + GCIFile::cReplayDataOffset + sizeof(uint64_t);
+		size_t blockCount = ((finalSize + GCIFile::cBlockSize - 1) & ~(GCIFile::cBlockSize - 1)) / 0x2000;
+
+		std::vector<uint8_t> dataBuffer;
+		serializeBinary(dataBuffer, replay.header.flags);
+		serializeBinary(dataBuffer, replay.header.levelID);
+		serializeBinary(dataBuffer, replay.header.levelDifficulty);
+		serializeBinary(dataBuffer, replay.header.levelFloor);
+		serializeBinary(dataBuffer, static_cast<uint8_t>(0));
+		serializeBinary(dataBuffer, replay.header.scorePoints);
+		serializeBinary(dataBuffer, static_cast<uint32_t>(0)); // timestamp
+		dataBuffer.insert(dataBuffer.end(), ((96 * 32) + (32 * 32)) * 2, 0xCC); // some color
+		
+		std::vector<uint8_t> gameNameComment = stringToBuffer(GCIFile::cGameName);
+		gameNameComment.resize(GCIFile::cCommentFieldSize, 0);
+		dataBuffer.insert(dataBuffer.end(), gameNameComment.begin(), gameNameComment.end());
+
+		std::string replayName;
+		switch (replay.header.levelDifficulty)
+		{
+		case 0:
+			replayName.append("Beg");
+			break;
+		case 1:
+			replayName.append("Adv");
+			break;
+		case 2:
+			replayName.append("Exp");
+			break;
+		default:
+			replayName.append("Unk");
+			break;
+		}
+		replayName.append(".FL").append(std::to_string(replay.header.levelFloor));
+		replayName.append(" - smb-replay-builder");
+
+		std::vector<uint8_t> fileNameComment = stringToBuffer(replayName);
+		fileNameComment.resize(GCIFile::cCommentFieldSize, 0);
+		dataBuffer.insert(dataBuffer.end(), fileNameComment.begin(), fileNameComment.end());
+		serializeBinary(dataBuffer, static_cast<uint64_t>(uncompressedBuffer.size()));
+		dataBuffer.insert(dataBuffer.end(), compressedBuffer.begin(), compressedBuffer.end());
+		dataBuffer.resize(blockCount * GCIFile::cBlockSize - sizeof(uint16_t), 0);
+
+		GCIFile gci;
+		gci.blockCount = static_cast<uint16_t>(blockCount);
+
+		// We fill out this one so that files don't collide.
+		// Not accurate since the GC epoch is 2000 and not 1970, but unique.
+		uint64_t timestamp;
+		{
+			using namespace std::chrono;
+			timestamp = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count() * 40500;
+		}
+		char filename[21];
+		snprintf(filename, sizeof(filename), "smkb%016llx", timestamp);
+
+		gci.filename = std::string(filename);
+		serializeBinary(outputData, gci);
+		serializeBinary(outputData, getCRCForBuffer(dataBuffer));
+		outputData.insert(outputData.end(), dataBuffer.begin(), dataBuffer.end());
 	}
 	else
 	{
