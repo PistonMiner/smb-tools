@@ -660,8 +660,8 @@ int main(int argc, char **argv)
 	po::options_description optionDescription("Valid options");
 	optionDescription.add_options()
 		("help"									, "print usage")
-		("in-format,i",	po::value<std::string>(), "input file format (binary, json)")
-		("out-format,o",	po::value<std::string>(), "output file format (binary, json)")
+		("in-format,i",	po::value<std::string>(), "input file format (binary, gci, json)")
+		("out-format,o",	po::value<std::string>(), "output file format (binary, gci, json)")
 		("in-file",		po::value<std::string>(), "input filename")
 		("out-file",	po::value<std::string>(), "output filename");
 	po::positional_options_description positionalOptionDescription;
