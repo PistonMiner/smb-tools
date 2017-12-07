@@ -656,29 +656,6 @@ void serializeBinary<GCIFile>(std::vector<uint8_t> &buffer, const GCIFile &value
 
 int main(int argc, char **argv)
 {
-	namespace po = boost::program_options;
-	po::options_description optionDescription("Valid options");
-	optionDescription.add_options()
-		("help"									, "print usage")
-		("in-format,i",	po::value<std::string>(), "input file format (binary, gci, json)")
-		("out-format,o",	po::value<std::string>(), "output file format (binary, gci, json)")
-		("in-file",		po::value<std::string>(), "input filename")
-		("out-file",	po::value<std::string>(), "output filename");
-	po::positional_options_description positionalOptionDescription;
-	//positionalOptionDescription.add("in-format", 1);
-	//positionalOptionDescription.add("out-format", 1);
-	positionalOptionDescription.add("in-file", 1);
-	positionalOptionDescription.add("out-file", 1);
-
-	po::variables_map varMap;
-	po::parsed_options parsedOptions = po::command_line_parser(argc, argv)
-		.options(optionDescription)
-		.positional(positionalOptionDescription)
-		.allow_unregistered().run();
-	std::vector<std::string> unrecognizedOptions = po::collect_unrecognized(parsedOptions.options, po::exclude_positional);
-	po::store(parsedOptions, varMap);
-	po::notify(varMap);
-
 	enum class FileFormat
 	{
 		Unknown,
@@ -706,7 +683,40 @@ int main(int argc, char **argv)
 		}
 	};
 
-	if (varMap.count("help") || unrecognizedOptions.size()
+	namespace po = boost::program_options;
+	po::options_description optionDescription("Valid options");
+	optionDescription.add_options()
+		("help"									, "print usage")
+		("in-format,i",	po::value<std::string>(), "input file format (binary, gci, json)")
+		("out-format,o",	po::value<std::string>(), "output file format (binary, gci, json)")
+		("in-file",		po::value<std::string>(), "input filename")
+		("out-file",	po::value<std::string>(), "output filename");
+	po::positional_options_description positionalOptionDescription;
+	//positionalOptionDescription.add("in-format", 1);
+	//positionalOptionDescription.add("out-format", 1);
+	positionalOptionDescription.add("in-file", 1);
+	positionalOptionDescription.add("out-file", 1);
+	std::vector<std::string> unrecognizedOptions;
+
+	bool parsingError = false;
+	po::variables_map varMap;
+	try
+	{
+		po::parsed_options parsedOptions = po::command_line_parser(argc, argv)
+			.options(optionDescription)
+			.positional(positionalOptionDescription)
+			.allow_unregistered().run();
+		unrecognizedOptions = po::collect_unrecognized(parsedOptions.options, po::exclude_positional);
+		po::store(parsedOptions, varMap);
+		po::notify(varMap);
+	}
+	catch (const boost::exception &)
+	{
+		parsingError = true;
+	}
+
+	if (parsingError || unrecognizedOptions.size()
+		|| varMap.count("help")
 		|| varMap.count("in-format") != 1
 		|| varMap.count("out-format") != 1
 		|| varMap.count("in-file") != 1
