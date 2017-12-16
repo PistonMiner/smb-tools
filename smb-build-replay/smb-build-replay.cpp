@@ -263,7 +263,7 @@ struct ReplayFileHeader
 	uint8_t levelID;
 	uint8_t levelDifficulty;
 	uint8_t levelFloor;
-	uint8_t  unk_05;
+	uint8_t  monkeyType;
 	uint16_t unk_06;
 	uint32_t unk_08;
 	uint32_t unk_0c;
@@ -291,7 +291,7 @@ void serializeBinary<ReplayFileHeader>(std::vector<uint8_t> &buffer, const Repla
 	serializeBinary(buffer, value.levelID);
 	serializeBinary(buffer, value.levelDifficulty);
 	serializeBinary(buffer, value.levelFloor);
-	serializeBinary(buffer, value.unk_05);
+	serializeBinary(buffer, value.monkeyType);
 	serializeBinary(buffer, value.unk_06);
 	serializeBinary(buffer, value.unk_08);
 	serializeBinary(buffer, value.unk_0c);
@@ -319,7 +319,7 @@ void deserializeBinary<ReplayFileHeader>(std::vector<uint8_t> &buffer, ReplayFil
 	deserializeBinary(buffer, value.levelID);
 	deserializeBinary(buffer, value.levelDifficulty);
 	deserializeBinary(buffer, value.levelFloor);
-	deserializeBinary(buffer, value.unk_05);
+	deserializeBinary(buffer, value.monkeyType);
 	deserializeBinary(buffer, value.unk_06);
 	deserializeBinary(buffer, value.unk_08);
 	deserializeBinary(buffer, value.unk_0c);
@@ -347,7 +347,7 @@ void serializeJSON<ReplayFileHeader>(nlohmann::json &buffer, const std::string &
 	serializeJSON(buffer[name], "levelID", value.levelID);
 	serializeJSON(buffer[name], "levelDifficulty", value.levelDifficulty);
 	serializeJSON(buffer[name], "levelFloor", value.levelFloor);
-	serializeJSON(buffer[name], "unk_05", value.unk_05);
+	serializeJSON(buffer[name], "monkeyType", value.monkeyType);
 	serializeJSON(buffer[name], "unk_06", value.unk_06);
 	serializeJSON(buffer[name], "unk_08", value.unk_08);
 	serializeJSON(buffer[name], "unk_0c", value.unk_0c);
@@ -375,7 +375,7 @@ void deserializeJSON<ReplayFileHeader>(const nlohmann::json &buffer, const std::
 	deserializeJSON(buffer[name], "levelID", value.levelID);
 	deserializeJSON(buffer[name], "levelDifficulty", value.levelDifficulty);
 	deserializeJSON(buffer[name], "levelFloor", value.levelFloor);
-	deserializeJSON(buffer[name], "unk_05", value.unk_05);
+	deserializeJSON(buffer[name], "monkeyType", value.monkeyType);
 	deserializeJSON(buffer[name], "unk_06", value.unk_06);
 	deserializeJSON(buffer[name], "unk_08", value.unk_08);
 	deserializeJSON(buffer[name], "unk_0c", value.unk_0c);
@@ -415,7 +415,7 @@ struct ReplayFile
 };
 
 const float ReplayFile::cPlayerPositionDeltaScale = 1.f / 16383.f;
-const float ReplayFile::cPlayerTiltScale = 1.f;
+const float ReplayFile::cPlayerTiltScale = 180.f / 32767.f;
 const float ReplayFile::cData567Scale = 256.f;
 const float ReplayFile::cData8Scale = 1.f / 127.f;
 const float ReplayFile::cStageTiltScale = 1.f;
@@ -688,7 +688,7 @@ int main(int argc, char **argv)
 	optionDescription.add_options()
 		("help"									, "print usage")
 		("in-format,i",	po::value<std::string>(), "input file format (binary, gci, json)")
-		("out-format,o",	po::value<std::string>(), "output file format (binary, gci, json)")
+		("out-format,o",po::value<std::string>(), "output file format (binary, gci, json)")
 		("in-file",		po::value<std::string>(), "input filename")
 		("out-file",	po::value<std::string>(), "output filename");
 	po::positional_options_description positionalOptionDescription;
