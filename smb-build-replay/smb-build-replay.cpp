@@ -810,7 +810,7 @@ int main(int argc, char **argv)
 			break;
 		}
 		replayName.append(".FL").append(std::to_string(replay.header.levelFloor));
-		replayName.append(" - smb-replay-builder");
+		replayName.append(" - smb-build-replay");
 
 		std::vector<uint8_t> fileNameComment = stringToBuffer(replayName);
 		fileNameComment.resize(GCIFile::cCommentFieldSize, 0);
