@@ -825,7 +825,16 @@ int main(int argc, char **argv)
 			replayName.append("U");
 			break;
 		}
-		replayName.append(std::to_string(replay.header.levelFloor)).append(" ");
+		std::string levelFloor = std::to_string(replay.header.levelFloor);
+		if (levelFloor.length() == 1)
+		{
+			levelFloor = "00" + levelFloor;
+		}
+		else if (levelFloor.length() == 2)
+		{
+			levelFloor = "0" + levelFloor;
+		}
+		replayName.append(levelFloor).append(" ");
 		if (varMap.count("comment"))
 		{
 			replayName.append(varMap.at("comment").as<std::string>());
