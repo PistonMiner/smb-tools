@@ -828,6 +828,10 @@ int main(int argc, char **argv)
 		std::string levelFloor = std::to_string(replay.header.levelFloor);
 		if (levelFloor.length() == 1)
 		{
+			levelFloor = "00" + levelFloor;
+		}
+		else if (levelFloor.length() == 2)
+		{
 			levelFloor = "0" + levelFloor;
 		}
 		replayName.append(levelFloor).append(" ");
