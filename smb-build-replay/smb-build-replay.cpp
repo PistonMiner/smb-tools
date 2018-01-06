@@ -418,7 +418,7 @@ const float ReplayFile::cPlayerPositionDeltaScale = 1.f / 16383.f;
 const float ReplayFile::cPlayerTiltScale = 180.f / 32767.f;
 const float ReplayFile::cData567Scale = 256.f;
 const float ReplayFile::cData8Scale = 1.f / 127.f;
-const float ReplayFile::cStageTiltScale = 90.f / 32767.f;
+const float ReplayFile::cStageTiltScale = 110.f / 32767.f;
 
 template<typename T>
 void serializeCompoundBlock(std::vector<uint8_t> &buffer, const std::vector<T> &data)
