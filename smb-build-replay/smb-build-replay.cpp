@@ -797,20 +797,20 @@ int main(int argc, char **argv)
 		switch (replay.header.levelDifficulty)
 		{
 		case 0:
-			replayName.append("Beg");
+			replayName.append("BE");
 			break;
 		case 1:
-			replayName.append("Adv");
+			replayName.append("AD");
 			break;
 		case 2:
-			replayName.append("Exp");
+			replayName.append("EX");
 			break;
 		default:
-			replayName.append("Unk");
+			replayName.append("UK");
 			break;
 		}
-		replayName.append(".FL").append(std::to_string(replay.header.levelFloor));
-		replayName.append(" - smb-build-replay");
+		replayName.append(".FL").append(std::to_string(replay.header.levelFloor)).append("|");
+		replayName.append("<UNTAGGED>");
 
 		std::vector<uint8_t> fileNameComment = stringToBuffer(replayName);
 		fileNameComment.resize(GCIFile::cCommentFieldSize, 0);
