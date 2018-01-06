@@ -807,6 +807,18 @@ int main(int argc, char **argv)
 		case 2:
 			replayName.append("E");
 			break;
+		case 8:
+			replayName.append("W");
+			break;
+		case 9:
+			replayName.append("D");
+			break;
+		case 14:
+			replayName.append("Y");
+			break;
+		case 16:
+			replayName.append("N");
+			break;
 		default:
 			replayName.append("U");
 			break;
