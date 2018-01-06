@@ -686,12 +686,13 @@ int main(int argc, char **argv)
 	namespace po = boost::program_options;
 	po::options_description optionDescription("Valid options");
 	optionDescription.add_options()
-		("help"									, "print usage")
-		("in-format,i",	po::value<std::string>(), "input file format (binary, gci, json)")
-		("out-format,o",po::value<std::string>(), "output file format (binary, gci, json)")
-		("pretty,p"								, "print JSON prettified for easier editing")
-		("in-file",		po::value<std::string>(), "input filename")
-		("out-file",	po::value<std::string>(), "output filename");
+		("help",									"print usage")
+		("in-format,i",	po::value<std::string>(),	"input file format (binary, gci, json)")
+		("out-format,o",po::value<std::string>(),	"output file format (binary, gci, json)")
+		("comment,c",	po::value<std::string>(),	"GCI file comment")
+		("pretty,p",								"print JSON prettified for easier editing")
+		("in-file",		po::value<std::string>(),	"input filename")
+		("out-file",	po::value<std::string>(),	"output filename");
 	po::positional_options_description positionalOptionDescription;
 	//positionalOptionDescription.add("in-format", 1);
 	//positionalOptionDescription.add("out-format", 1);
@@ -798,20 +799,33 @@ int main(int argc, char **argv)
 		switch (replay.header.levelDifficulty)
 		{
 		case 0:
-			replayName.append("BE");
+			replayName.append("B");
 			break;
 		case 1:
-			replayName.append("AD");
+			replayName.append("A");
 			break;
 		case 2:
-			replayName.append("EX");
+			replayName.append("E");
 			break;
 		default:
-			replayName.append("UK");
+			replayName.append("U");
 			break;
 		}
-		replayName.append(".FL").append(std::to_string(replay.header.levelFloor)).append("|");
-		replayName.append("<UNTAGGED>");
+		replayName.append(std::to_string(replay.header.levelFloor)).append(" ");
+		if (varMap.count("comment"))
+		{
+			replayName.append(varMap.at("comment").as<std::string>());
+		}
+		else
+		{
+			replayName.append("<UNTAGGED>");
+		}
+
+		if (replayName.size() >= GCIFile::cCommentFieldSize)
+		{
+			// #todo-smb-build-replay: Is null termination required?
+			replayName.resize(GCIFile::cCommentFieldSize - 1);
+		}
 
 		std::vector<uint8_t> fileNameComment = stringToBuffer(replayName);
 		fileNameComment.resize(GCIFile::cCommentFieldSize, 0);
