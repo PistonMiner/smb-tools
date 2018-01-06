@@ -721,6 +721,8 @@ int main(int argc, char **argv)
 		|| varMap.count("help")
 		|| varMap.count("in-format") != 1
 		|| varMap.count("out-format") != 1
+		|| varMap.count("comment") > 1
+		|| varMap.count("pretty") > 1
 		|| varMap.count("in-file") != 1
 		|| varMap.count("out-file") != 1)
 	{
