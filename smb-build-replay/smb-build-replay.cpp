@@ -689,6 +689,7 @@ int main(int argc, char **argv)
 		("help"									, "print usage")
 		("in-format,i",	po::value<std::string>(), "input file format (binary, gci, json)")
 		("out-format,o",po::value<std::string>(), "output file format (binary, gci, json)")
+		("pretty,p"								, "print JSON prettified for easier editing")
 		("in-file",		po::value<std::string>(), "input filename")
 		("out-file",	po::value<std::string>(), "output filename");
 	po::positional_options_description positionalOptionDescription;
@@ -768,7 +769,7 @@ int main(int argc, char **argv)
 	{
 		nlohmann::json outputJSON;
 		serializeJSON(outputJSON, "root", replay);
-		outputData = stringToBuffer(outputJSON.dump());
+		outputData = stringToBuffer(outputJSON.dump(varMap.count("pretty") ? 2 : -1));
 	}
 	else if (outputFormat == FileFormat::GCI)
 	{
