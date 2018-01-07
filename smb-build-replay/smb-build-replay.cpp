@@ -686,13 +686,14 @@ int main(int argc, char **argv)
 	namespace po = boost::program_options;
 	po::options_description optionDescription("Valid options");
 	optionDescription.add_options()
-		("help",									"print usage")
-		("in-format,i",	po::value<std::string>(),	"input file format (binary, gci, json)")
-		("out-format,o",po::value<std::string>(),	"output file format (binary, gci, json)")
-		("comment,c",	po::value<std::string>(),	"GCI file comment")
-		("pretty,p",								"print JSON prettified for easier editing")
-		("in-file",		po::value<std::string>(),	"input filename")
-		("out-file",	po::value<std::string>(),	"output filename");
+		("help",												"print usage")
+		("in-format,i",		po::value<std::string>(),			"input file format (binary, gci, json)")
+		("out-format,o",	po::value<std::string>(),			"output file format (binary, gci, json)")
+		("comment,c",		po::value<std::string>(),			"GCI file comment")
+		("pad-floor-number",po::value<int>()->default_value(0), "number of digits to pad floor number in GCI file comment to")
+		("pretty,p",											"print JSON prettified for easier editing")
+		("in-file",			po::value<std::string>(),			"input filename")
+		("out-file",		po::value<std::string>(),			"output filename");
 	po::positional_options_description positionalOptionDescription;
 	//positionalOptionDescription.add("in-format", 1);
 	//positionalOptionDescription.add("out-format", 1);
@@ -722,6 +723,7 @@ int main(int argc, char **argv)
 		|| varMap.count("in-format") != 1
 		|| varMap.count("out-format") != 1
 		|| varMap.count("comment") > 1
+		|| varMap.count("pad-floor-number") > 1
 		|| varMap.count("pretty") > 1
 		|| varMap.count("in-file") != 1
 		|| varMap.count("out-file") != 1)
@@ -825,16 +827,12 @@ int main(int argc, char **argv)
 			replayName.append("U");
 			break;
 		}
-		std::string levelFloor = std::to_string(replay.header.levelFloor);
-		if (levelFloor.length() == 1)
+		std::string floorStringPadded = std::to_string(replay.header.levelFloor);
+		if (static_cast<int>(floorStringPadded.size()) < varMap.at("pad-floor-number").as<int>())
 		{
-			levelFloor = "00" + levelFloor;
+			floorStringPadded.insert(0, varMap.at("pad-floor-number").as<int>() - static_cast<int>(floorStringPadded.size()), '0');
 		}
-		else if (levelFloor.length() == 2)
-		{
-			levelFloor = "0" + levelFloor;
-		}
-		replayName.append(levelFloor).append(" ");
+		replayName.append(floorStringPadded).append(" ");
 		if (varMap.count("comment"))
 		{
 			replayName.append(varMap.at("comment").as<std::string>());
